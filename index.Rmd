@@ -12,7 +12,7 @@ output:
     toc_depth: 3
     css: "style.css"
     number_sections: true
-description: "Notes from the Garvin"
+description: "Notes from the Tidy Tools Workshops"
 
 editor_options: 
   chunk_output_type: console
@@ -1118,4 +1118,828 @@ use_pkgdown_travis()
 
 *Runs automated checks for common problems in R packages.
 Useful for local packages, even with some false positives.
-If you want to submit to CRAN, you must pass R CMD check cleanly.
+If you want to submit to CRAN, you <font color="red">must</font> pass R CMD check cleanly.
+
+http://r-pkgs.had.co.nz/check.html
+
+To avoid frustration run early and run often
+
+### Fowler
+
+“If it hurts, do it more often”  
+— Martin Fowler
+
+https://martinfowler.com/bliki/FrequencyReducesDifficulty.html
+
+### Types of problem
+
+```{r eval=TRUE, echo=FALSE, fig.cap="Types of problems", cache=FALSE}
+knitr::include_graphics("./images/problems.png")
+```
+
+NOTE: Fix if submitting to CRAN.  It is possible to submit with a NOTE, but it’s best avoided.
+
+### Checking
+
+<font color="red">Cmd/Ctrl + Shift + E</font>  
+`devtools::check()`
+
+If you don't understand an error, google it!
+
+## CRAN
+
+### Submission to CRAN
+
+`usethis::use_release_issue()`
+
+Particularly important for larger packages where release process might take weeks.
+But also useful for smaller packages, and you should feel free to tweak for your needs.
+
+### CRAN workflow
+
+```{r eval=TRUE, echo=FALSE, fig.cap="CRAN workflow", cache=FALSE}
+knitr::include_graphics("./images/cran.png")
+```
+
+### cran-comments.md
+
+```
+## Test environments
+* local OS X install (R-release)
+* win-builder (R-release, R-devel)
+
+## R CMD check results
+
+0 errors | 0 warnings | 1 note
+
+* This is a new release.
+```
+Goal is to document your process  
+There's always one note for a new submisison.
+
+### If your submission fails
+
+Do not despair! It happens to everyone, even R-core and tidyverse developers.
+
+If it’s from the CRAN robot, just fix the problem & resubmit.
+
+If it’s from a human, do not respond to the email and do not argue. Instead update crancomments.md & resubmit.
+
+### For resubmission:
+
+```
+This is a resubmission. Compared to the last submission, I have:
+
+* First change.
+* Second change.
+* Third change
+
+---
+
+## Test environments
+* local OS X install, R 3.2.2
+* win-builder (devel and release)
+
+## R CMD check results
+
+...
+```
+
+# Scoping and Dependencies
+
+### How does R find funcitons?
+```{r}
+sd
+x <- 1:10
+sd(x)
+
+var <- function(x) 100
+var(x)
+sd(x)
+```
+
+```{r}
+my_sd <- function(x) sqrt(var(x))
+my_sd(x)
+```
+
+## Scoping
+
+### MOtivation
+
+What is the value of f
+```{r}
+x <- 1
+f <- function() {
+  y <- 2
+  z <- 2
+  g <- function() {
+    z <- 3
+    c(x, y, z)
+  }
+  g()
+}
+f()
+```
+
+### Environments
+
+* What is an environment?
+  * Where stuff lives
+  * Set of bindings between names and object
+  * Lookup table
+  * Data structure powers scoping
+* How is it different from a list?
+  * Environments are unordered
+  * x <- 1
+  * x
+  * Environments have parent
+
+* What's the "default" environment?
+* How can you see what's inside an environment?
+
+### Looking at Environments
+```{r}
+library(rlang)
+env_print(globalenv())
+rm(x)
+env_print(globalenv())
+rm(var, tb, f, my_sd, install_github)
+env_print(globalenv())
+```
+
+### `find_env()`
+
+```{r}
+find_env <- function(name, env) { 
+  if (identical(env, emptyenv())) {
+    stop("Can't find `", name, "`", call. = FALSE)
+  } else if (env_has(env, name)) {
+    env
+  } else {
+    find_env(name, env_parent(env))
+  }
+}
+x <- 1
+find_env("x", globalenv())
+find_env("c", globalenv())
+find_env("asdfsd", globalenv())
+```
+
+```{r}
+find_env("var", get_env(my_sd))
+find_env("var", get_env(sd))
+```
+
+### Your turn
+
+* `create_package("~/desktop/ns")`
+* `use_mit_license()`
+* `use_r("sd")`:
+
+    ```{r}
+    #' My standard deviation function
+    #'
+    #' @param x A numeric vector
+    #' @param na.rm Remove missing values?
+    #' @export
+    my_sd <- function (x, na.rm = FALSE) {
+      sqrt(var(x, na.rm = na.rm))
+    }
+    ```
+
+* `devtools::check()`
+
+## Dependency
+
+### Using a function from another package
+
+* `use_package("other-package")`
+* Either `dplyr::mutate` or `@importFrom dplyr mutate`
+
+* `@importFrom dplyr mutate` affects every function in your package
+  * Slightly better to all import directives in one place
+  * The place to put it is a package documentation file
+  * `use_package_doc()`
+
+* Avoid `@import dplyr`
+  * Some exceptions: `@import rlang` ok, because rlang designed for it
+  * `@import stringr` because all functions have `str_` prefix
+
+
+* `@importFrom` is needed for infix functions, like `@importFrom magrittr %>%`
+* If you also want the user of your package to have access to the pipe, call `use_pipe()` - this "re-exports" `%>%`
+
+### Practice
+
+* Put this in a package called counting
+* Document it
+* Get R CMD check passing
+
+```{r}
+my_count <- function(x) {
+  count(data.frame(x = x), x, sort = TRUE)
+}
+```
+
+### Thinking about Dependencies
+
+**Brainstorm**: What are the costs and benefits of a taking a dependency?
+
+Costs:
+* Don't know the details
+* Don't control the code (so update might break your code)
+* Respect their license
+* Download and install time
+* No bragging rights
+
+Benefits:
+* Performance
+* Not your problem
+* Thought through more edge cases / exposed to more people
+* Focus on your problem
+* Don't know how to do it / too hard
+
+### Your turn
+
+Compare and contrast dplyr with glue. Look at their CRAN pages - and see what you can quantify
+
+* number of github issues: 24 (glue) vs 67 (dplyr)
+* needed packags: 0 (glue) vs 13+ (dplyr)
+* windows package size: 170 kb (glue) vs 3.2 mb (dplyr)
+* install time: 3s (glue) vs 300s (dplyr)
+
+```{r}
+itdepends::dep_weight(c("dplyr", "glue"))
+```
+
+# Tidyverse
+
+## Motivation
+
+```{r}
+library(ggplot2)
+library(dplyr)
+# Create a local copy of first 10 rows of mtcars data frame
+# We'll come back how you should store this later
+mtcars <- data.frame(
+  mpg = c(21, 21, 22.8, 21.4, 18.7, 18.1, 14.3, 24.4, 22.8, 19.2),
+  cyl = c(6, 6, 4, 6, 8, 6, 8, 4, 4, 6),
+  disp = c(160, 160, 108, 258, 360, 225, 360, 146.7, 140.8, 167.6),
+  hp = c(110, 110, 93, 110, 175, 105, 245, 62, 95, 123),
+  drat = c(3.9, 3.9, 3.85, 3.08, 3.15, 2.76, 3.21, 3.69, 3.92, 3.92),
+  wt = c(2.62, 2.875, 2.32, 3.215, 3.44, 3.46, 3.57, 3.19, 3.15, 3.44),
+  qsec = c(16.46, 17.02, 18.61, 19.44, 17.02, 20.22, 15.84, 20, 22.9, 18.3),
+  vs = c(0, 0, 1, 1, 0, 1, 0, 1, 1, 1),
+  am = c(1, 1, 1, 0, 0, 0, 0, 0, 0, 0),
+  gear = c(4, 4, 4, 3, 3, 3, 3, 4, 4, 4),
+  carb = c(4, 4, 1, 1, 2, 1, 4, 2, 2, 4)
+)
+
+# cyl_plot()
+ggplot(mtcars) + 
+  geom_bar(aes(cyl)) + 
+  coord_flip()
+
+# cyl_sum()
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(n = n(), mpg = mean(mpg))
+```
+
+### Your turn
+
+* `create_package("~/desktop/tidytest")`
+* `use_mit_license()` / `use_gpl3_license()`
+* make two functions: `cyl_plot()` and `cyl_summary()`
+* make it work - remember dependency stuff (`use_something()`, and `::`)
+* get check passing as cleanly as you can
+
+
+
+#### What did we do?
+
+* Remove `library()` calls; and replace with calling `use_package()` once
+* `use_pipe()` OR `@importFrom magrritr %>%` + `use_package(magrittr)`
+* Resolve df-var vs env-var ambiguity by using `.data$`
+* `@importFrom rlang .data` + `use_package("rlang")`
+
+## Tidy evaluation
+
+### Motivation
+```{r}
+library(tidyverse)
+a <- 1
+df <- data.frame(b = 1)
+mutate(df, c = a + b)
+ggplot(df, aes(a, b)) + geom_point()
+n <- 2
+ggplot(mtcars, aes(disp, mpg)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", formula = y ~ splines::ns(x, df = n))
+```
+
+### **Your turn**: 
+
+Add this function to your package and get R CMD check passing:
+
+```{r}
+#' @importFrom rlang .data
+diamonds_summary2 <- function(bins) {
+  ggplot2::diamonds %>% 
+    ggplot2::ggplot(ggplot2::aes(.data$carat, .data$price)) + 
+    ggplot2::geom_hex(bins = bins)
+}
+```
+
+#### Solution
+```{r}
+hexbin <- function(df, x, y, bins = 10) {
+  df %>% 
+    ggplot2::ggplot(ggplot2::aes({{ x }}, {{ y }})) + 
+    ggplot2::geom_hex(bins = bins)
+}
+hexbin(diamonds, carat, price)
+```
+
+
+### Your turn 
+
+Make these functions work and pass R CMD check:
+
+```{r}
+piechart <- function(df, x) {
+  ggplot(df) + 
+    geom_bar(aes(x), width = 1) + 
+    coord_polar(theta = "y")
+}
+
+barchart2 <- function(df, x, y) {
+  plot <- ggplot(df)
+  if (missing(y)) {
+    plot <- plot + geom_bar(aes({{ x }}))
+  } else {
+    plot <- plot + geom_col(aes(x, y))
+  }
+  plot + coord_flip()
+}
+
+group_summary <- function(df, grp, x) {
+  df %>% 
+    group_by(grp) %>% 
+    summarise(
+      n = n(),
+      min = min(x, na.rm = TRUE),
+      max = max(x, na.rm = TRUE)
+    )
+}
+```
+
+#### Partial Solution: 
+
+```{r}
+group_summary <- function(df, grp, x) {
+  df %>% 
+    group_by({{ grp }}) %>% 
+    summarise(
+      n = n(),
+      min = min({{ x }}, na.rm = TRUE), 
+      max = max({{ x }}, na.rm = TRUE)
+    )
+}
+group_summary(diamonds, cut, carat)
+group_summary(diamonds, color, price)
+```
+
+#### Problematic Solution: 
+```{r}
+group_summary <- function(df, grp1, grp2, x) {
+  df %>% 
+    group_by({{ grp1 }}, {{ grp2 }}) %>% 
+    summarise(
+      n = n(),
+      min = min({{ x }}, na.rm = TRUE), 
+      max = max({{ x }}, na.rm = TRUE)
+    )
+}
+group_summary(diamonds, cut, , price)
+group_summary(diamonds, cut, color, price)
+```
+
+#### Solution: 
+```{r}
+group_summary <- function(df, x, ...) {
+  df %>% 
+    group_by(...) %>% 
+    summarise(
+      n = n(),
+      min = min({{ x }}, na.rm = TRUE), 
+      max = max({{ x }}, na.rm = TRUE)
+    )
+}
+group_summary(diamonds, price, cut)
+group_summary(diamonds, price, cut, color)
+```
+
+## Data
+
+### Documenting creating your data
+* `use_data_raw("name_of_dataset")`
+  * creates an R file in `data-raw` with same name as your dataset
+  * `usethis::use_data()` to create the binary data file that R uses (wrapper around `save()`)
+
+* To document: 
+  * `use_r("data")`
+  *
+      ```R
+      #' Title
+      #'
+      #' @description
+      #' Data dictionary:
+      #'
+      #' * `var1`: description1
+      "name_of_dataset"
+      ```
+
+A little more information at: https://roxygen2.r-lib.org/articles/rd.html#datasets 
+
+# Interface
+
+## Introduction
+
+https://design.tidyverse.org
+
+```{r}
+y <- sum(x)
+```
+
+Assuming this code works (with out errors or warnings):
+
+* What do you know about `x`?
+  * Numeric or logical vector (or matrix/array)
+  
+* What do you know about `y`?
+  * Length 1
+  * Numeric
+
+> What do you know about x and y here?  
+```{r}
+y <- sapply(x, f)
+```
+
+## What composes an interface?
+
+What are the properties of a function that define its interface? (There are at least 9)
+
+* Name
+
+* Inputs (arguments)
+  * Names
+  * Types (vector, scalar etc) 
+  * Defaults
+  * Model of evaluation (does it use tidy evaluation?)
+
+* Output
+  * Type
+  * Visibility
+
+* Side-effects
+  * Saving a file to disk
+  * Showing a plot
+  * Printing in the console
+
+* Errors/warnings/messages
+
+```{r}
+hidden <- function(x) invisible(x ^ 2)
+hidden(100)
+x <- hidden(100)
+x
+side_effect <- function(x) {
+  
+}
+```
+
+## Conflicted package
+Digression about `conflicted` package - which I highly recommend.
+
+## String functions
+
+### Study Base R String Functions
+
+```{r, eval = FALSE}
+strsplit(x, split, ...)
+grep(pattern, x, value = FALSE, ...)
+grepl(pattern, x, ...)
+sub(pattern, replacement, x, ...)
+gsub(pattern, replacement, x, ...)
+regexpr(pattern, text, ...)
+gregexpr(pattern, text, ...)
+regexec(pattern, text, ...)
+substr(x, start, stop)
+nchar(x, type, ...)
+```
+
+What about the interface of these functions makes them to hard to use/remember?
+
+* Names
+  * Confusing
+  * Don't have a common prefix
+  * g should be a suffix
+
+* Arguments
+  * Order inconsistent
+  * Character vector should come first
+  * Names inconsistent (`x` and `text`; `pattern` and `split`)
+
+* Output: `regexpr` not easily used with the other functions
+  
+* Packaging: no easy to find the complete collecitonx
+  
+```{r}
+x <- c("abc", "bca", "dfaaa", "bc")
+str(regexpr("a+", x))
+```
+
+## Names
+
+### Names of Base R String Functions
+
+```{r}
+strsplit()           # str_split()
+grep()               # str_which()
+grep(value = TRUE)   # str_subset() - str_sub()
+grepl()              # str_detect()
+sub()                # str_replace()
+gsub()               # str_replace_all()
+```
+
+### Names of `Stringr` Functions
+
+```{r}
+str_which()  # locations in the character vector
+x <- c("apple", "banana", "lemon")
+str_which(x, "a")
+str_locate() # locations in the individual strings
+str_locate(x, "a")
+```
+
+### Names of `Stringr` Functions
+
+> Use suffixes to specify versions
+
+```{r}
+str_SOMETHING_lgl() # str_detect
+str_SOMETHING_int() # str_which
+str_SOMETHING_chr() # str_subset
+str_locate() # str_which
+chr_locate() # str_locate
+```
+
+* Most functions should be verbs (exception is interfaces like ggplot2 where you're building up complex objects with nouns)
+
+* Use prefixes to arrange families of related functions; use suffixes for variation on theme. Motivated by autocomplete
+
+* Think a lot about names. Good name provdes mental hook that aids memory.
+
+* BE CONSISTENT - pick one of snake_case and camelCase and use it!
+
+### **Your turn**: What `stringr` (and other tidyverse ) functions, don't follow these principles? Why not?
+
+* `as.interval()`, `geom_point(na.rm = TRUE)`  - today would create `as_interval()`, `geom_point(na_rm = TRUE)`
+
+(Aside: use `Ctrl + . ` to navigate between files and functions)
+
+* `arrange()` - `arrange(df, desc(x))` 
+   vs `arrange_asc(df, x)`; `arrange_desc(df, x)`
+   `arrange(df, x, desc(y))`
+
+* `left_join()`, `right_join()` -> should be
+  `join_left()`, `join_right()`.
+
+* `filter()`: keeping in or throwing out? 
+  * `cleave()`, `
+
+* UK vs US English - `scale_colour_gray()`
+  * `summarise()` vs `summarize()`
+  * `col`, or `stroke` / `fill`, `col1`, `col2`
+
+## Arguments
+
+* want argument names to be consistent. Both consistent style, and consistent names across functions.
+
+* If the first argument is a data frame: `data`; if it's a vector call it `x`
+
+### **Your turn**: Can you divide these function arguments into functional groups?
+
+```{r}
+strsplit(x, split, fixed = TRUE)
+grepl(pattern, x, fixed = TRUE, ignore.case = TRUE)
+gsub(pattern, replacement, x, fixed = TRUE, ignore.case = TRUE)
+gregexpr(pattern, text, fixed = TRUE)
+substr(x, start, stop)
+mutate(df, ...)
+left_join(x, y, by = c("xyz", "def"))
+str_detect(x, pattern, negate = TRUE) # !str_detect(x, pattern)
+```
+
+* Data: `x`, `df`, `y`, `text` - main vector argument
+
+* Descriptors: `pattern`, `replacement`, `by`, `start`, `stop`
+
+* Details: `fixed`, `ignore.case`, `negate` - control the detail of the algorithm. Almost always optional
+
+Order arguments from most important to least important. And least important should have defaults. Putting the "data" first, ensures that it works with the pipe. And required arguments (no defaults), should come be optional arguments (with defaults).
+
+When calling a function, you should always spell out name of details arguments; and don't use names for data arguments.
+
+```{r}
+mean(x, na.rm = TRUE)
+mean(x = x, , TRUE)
+mean(n = T, x)
+str_replace_all(x, "[a-z]", "")
+```
+
+Sometimes can have one complicated argument or two simpler arguments:
+
+```{r}
+library(stringr)
+hw <- "Hadley Wickham"
+pos <- str_locate_all(hw, "[aeio]")[[1]]
+str_sub(hw, pos[, 1], pos[, 2])
+```
+
+```{r}
+grepl("x", "xxxyyxx", perl = TRUE, fixed = TRUE)
+# engine = "perl"
+# engine = "fixed" 
+# engine = "default"
+str_subset("xxxyz", fixed("."))
+str_subset("xxxyz", regex(".", multiline = TRUE))
+```
+
+```{r}
+str_to_lower()
+str_to_sentence()
+str_to_upper()
+str_to_title()
+str_change_case(x, "lower", locale = "en")
+str_detect_fixed()
+str_detect_regexp()
+str_detect_coll()
+stringi::stri_replace
+```
+
+* Many very simple functions <-> few more complicated functions
+
+* Look independence; orthogonality; Cartesian products; combinatorial explosion - be able to implemnt n approaches to problem A and m approaches to problem B, and n * m solution.
+
+```{r}
+df %>% summarise_all(mean)
+df %>% summarise_at(vars(starts_with("f")), mean)
+df %>% summarise_if(is.numeric, mean)
+df %>% summarise(
+  across(is.numeric, mean),
+  across(is.factor, nlevels),
+  n = n()
+)
+df %>% summarise(
+  across(is.numeric & starts_with("f"), mean)
+)
+df %>% summarise(
+  rowMeans(across(is.numeric))
+)
+```
+
+
+## Hidden arguments
+
+```{r}
+str(data.frame(x = "abc"))
+options(stringsAsFactors = FALSE)
+str(data.frame(x = "abc"))
+str_to_lower("I", locale = "tr")
+str_to_upper("i", locale = "tr")
+str_to_upper("i", locale = "tr")
+# Statİdentity
+sort(letters)
+str_sort(c("a", "o", "z", "å", "ø"))
+str_sort(c("a", "o", "z", "å", "ø"), locale = "se")
+print(1.23)
+options(OutDec = ",")
+print(1.23)
+```
+
+```{r}
+library(purrr)
+x <- list(list(a = 1), list(a = 2), list(b = 3))
+map_dbl(x, "a", .default = NA)
+map_dbl(x, pluck("x"))
+map_dbl(x, function(x, ...) x$a, .default = NA)
+```
+
+# Object-oriented programming
+
+* Base types - `typeof()`
+* S3 - simplest system of OOP. Adding attributes to an object.
+  The most important attribute `class`
+* S4 - robust, but much more complicated, and unless you're working with Bioconductor. Don't use until there's a good book about it.
+* R6 - very different to S3/S4, it's much more like OOP in python or javascript, or basically any other popular programming language of the last 20 years (apart from Julia). Powers `reticulate`. Useful in various places in Shiny. Avoided unless you really need it.
+
+Five chapters: <https://adv-r.hadley.nz>.
+
+## S3
+
+The simplest thing that might possibly work. Built on top of regular R objects (atomic vectors, lists, functions, ...).
+
+```{r}
+df <- data.frame()
+f <- factor()
+mod <- lm(mpg ~ cyl, data = mtcars)
+sloop::otype(df)
+sloop::otype(f)
+sloop::otype(mod)
+sloop::otype(1:30)
+sloop::otype(tibble::tibble())
+typeof(tibble::tibble())
+typeof(df)
+typeof(f)
+typeof(mod)
+attributes(df)
+attributes(tibble::tibble())
+attributes(f)
+attributes(mod)
+```
+
+```{r}
+dt <- tibble::tibble(x = 1)
+sloop::s3_dispatch(print(dt))
+```
+
+* `print()` is called a **generic function** = interface
+* specific function is called **method** = implementation
+
+(F1 = help; F2 = definition)
+
+```{r}
+new_foo <- function() {
+  x <- list()
+  class(x) <- "foo"
+  x
+}
+y <- new_foo()
+sloop::s3_dispatch(print(y))
+print.foo <- function(x, ...) {
+  cat("Hello!\n")
+  invisible(x)
+}
+sloop::s3_dispatch(print(y))
+print(y)
+y
+z <- 1:10
+class(z) <- "test"
+t(z)
+t
+sloop::s3_dispatch(t(z))
+# calls t.test() 
+# because t.test is named like method
+# this is why you should never use . in your function names
+t
+sloop::ftype(t)
+```
+
+```{r}
+foo <- function(x) x + 1
+class(foo) <- "sneaky"
+print.sneaky <- function(x, ...) {
+  cat("function(x) x + 2\n")
+}
+foo
+foo(1)
+```
+
+Another aside:
+
+```{r}
+this_function_will_self_destruct <- function() {
+  rm(this_function_will_self_destruct, envir = globalenv())
+  
+  100
+}
+this_function_will_self_destruct()
+this_function_will_self_destruct()
+```
+
+More evil:
+
+```{r}
+`(` <- function(x) {
+  if (is.numeric(x) && runif(1) < 0.01) {
+    1
+  } else {
+    x
+  }
+}
+rm(`(`)
+```
+

@@ -6,8 +6,8 @@
 
 
 * This contains notes from Hadley's Tidy Tools clases: https://github.com/hadley/tidy-tools.  
-* I find the slides hard to search so I made a single document that combines the slides and code.
-* It has material from both the Atlanta and Garvin classes.
+* I find the slides hard to search so I made a single RMarkdown document that combines the slides and code.
+* When complete it will have material from both the Atlanta and Garvin classes.
 
 It combines Hadley's slides and code snippets and my notes.
 
